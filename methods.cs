@@ -10,6 +10,7 @@ using System.Data.SqlClient;
 using System.Data.OleDb;
 using System.Collections;
 using System.Net.Mail;
+using UPS_EOD;
 
 namespace UPS_EODprocessing
 {
@@ -83,7 +84,7 @@ namespace UPS_EODprocessing
 
             string queryString = @"SELECT ShipmentNumber
                                    FROM vw_UPS_EODmissedUPS
-                                   WHERE ShipDate > GETDATE()-7
+                                   WHERE ShipDate > GETDATE()-60
                                    AND ShipDate < GETDATE()";
 
             ArrayList al = new ArrayList();
@@ -242,7 +243,7 @@ namespace UPS_EODprocessing
             {
                 foreach (object column in row)
                 {
-                    sendEmail("ShawnH@FineLink.com", column.ToString() + " - Bad Shipment Number");
+                    sendEmail("keenan@FineLink.com", column.ToString() + " - Bad Shipment Number");
                     errorLog("9999", "No shipment#", "Bad shipment number: " + column.ToString());
                 }
             }
@@ -321,7 +322,7 @@ namespace UPS_EODprocessing
                                                            FROM CT_UPS_EODexport
                                                            WHERE id = " + id + @")";
             
-            //Inserting into the DB
+            //Inserting into the DB                     
             try
             {
                 using (SqlConnection conn = new SqlConnection(Globals.get_printableConnString))
@@ -451,46 +452,50 @@ namespace UPS_EODprocessing
                     Console.WriteLine(e.ToString());
                 }
 
-                //UPDATE CHARGES ACROSS LOGIC
-                string updateQuery2 = @"update pLogic.dbo.ShipmentItems
-                                        set ActualCharge = (select top 1 isnull(Price_Cost_Shipping, 0)
-                                                            from printable.dbo.vw_UPS_EODitemsDetail
-                                                            where ShipmentNumber = " + shipNum + @"
-                                                            and LineN = " + lineNum + @"),
-                                            EstimatedChrg = (select top 1 isnull(Price_Cost_Shipping, 0)
-                                                            from printable.dbo.vw_UPS_EODitemsDetail
-                                                            where ShipmentNumber = " + shipNum + @"
-                                                            and LineN = " + lineNum + @")
-                                        where ShipmentNumber = " + shipNum + @"
-                                        and LineN = " + lineNum;
+                #region UPDATE PRICING
+//                //UPDATE CHARGES ACROSS LOGIC
+//                string updateQuery2 = @"update pLogic.dbo.ShipmentItems
+//                                        set ActualCharge = (select top 1 isnull(Price_Cost_Shipping, 0)
+//                                                            from printable.dbo.vw_UPS_EODitemsDetail
+//                                                            where ShipmentNumber = " + shipNum + @"
+//                                                            and LineN = " + lineNum + @")
+//                                        where ShipmentNumber = " + shipNum + @"
+//                                        and LineN = " + lineNum;
 
-                try
-                {
-                    using (SqlConnection conn = new SqlConnection(Globals.get_logicConnString))
-                    {
-                        SqlCommand command = new SqlCommand(updateQuery2, conn);
-                        try
-                        {
-                            Console.WriteLine("Updating");
-                            int rowsUpdated = 0;
-                            command.Connection.Open();
-                            rowsUpdated = command.ExecuteNonQuery();
-                            Console.WriteLine(rowsUpdated.ToString() + " SI rows updated");
-                            command.Dispose();
-                            command = null;
-                        }
-                        catch (Exception e)
-                        {
-                            errorLog("16", "updateItemCharges", e.ToString().Substring(0, 250));
-                            Console.WriteLine(e.ToString());
-                        }
-                    }
-                }
-                catch (Exception e)
-                {
-                    errorLog("17", "updateItemCharges", e.ToString().Substring(0, 250));
-                    Console.WriteLine(e.ToString());
-                }
+        
+//                //EstimatedChrg = (select top 1 isnull(Price_Cost_Shipping, 0)
+//                //                from printable.dbo.vw_UPS_EODitemsDetail
+//                //                where ShipmentNumber = " + shipNum + @"
+//                //                and LineN = " + lineNum + @")
+
+//                try
+//                {
+//                    using (SqlConnection conn = new SqlConnection(Globals.get_logicConnString))
+//                    {
+//                        SqlCommand command = new SqlCommand(updateQuery2, conn);
+//                        try
+//                        {
+//                            Console.WriteLine("Updating");
+//                            int rowsUpdated = 0;
+//                            command.Connection.Open();
+//                            rowsUpdated = command.ExecuteNonQuery();
+//                            Console.WriteLine(rowsUpdated.ToString() + " SI rows updated");
+//                            command.Dispose();
+//                            command = null;
+//                        }
+//                        catch (Exception e)
+//                        {
+//                            errorLog("16", "updateItemCharges", e.ToString().Substring(0, 250));
+//                            Console.WriteLine(e.ToString());
+//                        }
+//                    }
+//                }
+//                catch (Exception e)
+//                {
+//                    errorLog("17", "updateItemCharges", e.ToString().Substring(0, 250));
+//                    Console.WriteLine(e.ToString());
+//                }
+             #endregion
 
                 //PROCESS EOD ITEMS
                 string updateQuery = @"update printable.dbo.CT_UPS_EODitems
@@ -636,83 +641,96 @@ namespace UPS_EODprocessing
             {
                 Console.WriteLine("Processing ShipmentItem ID:" + id + " as a Printable order");
                 Console.WriteLine("OrderDetail_ID:" + pti_ID);
-                string sqlda_cost = "";
 
-                string q_getCharges = @"SELECT TOP 1 ISNULL(Price_Cost_Shipping, 0)
-                                        FROM printable.dbo.OrderDetails
-                                        WHERE OrderDetail_ID = " + pti_ID;
+                PTIShipment shipment = new PTIShipment();
+                shipment.EOD_ID = id;
+                shipment.PTI_LineItemID = pti_ID;
+                shipment.GetShipmentCharges();
 
-                try
+                #region old code
+//                string sqlda_cost = "";
+
+//                string q_getCharges = @"select top 1 ex.totalShipmentcharge
+//                                        from printable.dbo.CT_UPS_EODexport ex inner join printable.dbo.CT_UPS_EODitems it
+//                                        on ex.id = it.exportID
+//                                        where it.PTI_lineItemID  = " + pti_ID;
+                
+                //try
+                //{
+                //    using (SqlConnection conn = new SqlConnection(Globals.get_logicConnString))
+                //    {
+                //        SqlCommand command = new SqlCommand(q_getCharges, conn);
+                //        try
+                //        {
+                //            command.Connection.Open();
+                //            try
+                //            {
+                //                sqlda_cost = command.ExecuteScalar().ToString();
+                //            }
+                //            catch (Exception e)
+                //            {
+                //                sqlda_cost = "0";
+                //            }
+
+                //            Console.WriteLine(sqlda_cost);
+
+                //            conn.Close();
+
+                //            if ((sqlda_cost == "") || (sqlda_cost == null))
+                //            {
+                //                //If no charges exist, make them 0
+                //                charges = 0;
+                //            }
+                //            else
+                //            {
+                //                //If charges exist, convert them to decimal and round.
+                //                charges = Convert.ToDecimal(sqlda_cost);    
+                //                /*charges = charges / getPTIpkgs(pti_ID, id);*/
+                //                charges = charges / getPTIlines(pti_ID, id);
+                //                charges = Math.Round(charges, 2);
+                //            }
+                //        }
+                //        catch (Exception e)
+                //        {                           
+                //            errorLog("9", "calculateItemCharges", e.ToString().Substring(0,250));
+                //            Console.WriteLine(e.ToString());                            
+                //        }
+                //    }
+                //}
+                //catch (Exception e)
+                //{
+                //    errorLog("10", "calculateItemCharges", e.ToString().Substring(0,250));
+                //    Console.WriteLine(e.ToString());
+                //}
+#endregion
+
+                if (shipment.freeShippingByZip_PTI())
                 {
-                    using (SqlConnection conn = new SqlConnection(Globals.get_logicConnString))
-                    {
-                        SqlCommand command = new SqlCommand(q_getCharges, conn);
-                        try
-                        {
-                            command.Connection.Open();
-                            try
-                            {
-                                sqlda_cost = command.ExecuteScalar().ToString();
-                            }
-                            catch (Exception e)
-                            {
-                                sqlda_cost = "0";
-                            }
-
-                            Console.WriteLine(sqlda_cost);
-
-                            conn.Close();
-
-                            if ((sqlda_cost == "") || (sqlda_cost == null))
-                            {
-                                //If no charges exist, make them 0
-                                charges = 0;
-                            }
-                            else
-                            {
-                                //If charges exist, convert them to decimal and round.
-                                charges = Convert.ToDecimal(sqlda_cost);
-                                
-                                charges = charges / getPTIpkgs(pti_ID, id);
-                                charges = charges / getPTIlines(pti_ID, id);
-                                charges = Math.Round(charges, 2);
-                            }
-                        }
-                        catch (Exception e)
-                        {                           
-                            errorLog("9", "calculateItemCharges", e.ToString().Substring(0,250));
-                            Console.WriteLine(e.ToString());                            
-                        }
-                    }
-                }
-                catch (Exception e)
-                {
-                    errorLog("10", "calculateItemCharges", e.ToString().Substring(0,250));
-                    Console.WriteLine(e.ToString());
-                }
-                        
-
-                //Update charges on CT_UPS_EODitems table and possibly ShipmentItems
-
-                if (freeShippingByZip_PTI(id)) //Free shipping by zip code check!!!
-                {
-                    charges = 0.00M;
-                    Console.WriteLine("Cummins - Columbus PTI Order: No charge shipping");
-                    errorLog("NOCHRG", "No charge Cummins", pti_ID + " - No charge shipping $0 - " + id);
-                    updateItemCharges(0.00M, id);
-                    updateItemCharges_PTI(0.00M, id, pti_ID);
-                    updateItemCharges_OrderDetails(0.00M, pti_ID);
-                }
-
-                Console.WriteLine("Charges: $" + charges);
-
-                if (Convert.ToDecimal(pti_ID) > 0)
-                {
+                    shipment.charges = 0.00M;
+                    shipment.UpdateItemCharges();
+ 
                 }
                 else
                 {
-                    updateItemCharges(charges, id);
+                    shipment.UpdateItemCharges();
                 }
+
+                ////Update charges on CT_UPS_EODitems table and possibly ShipmentItems
+                ////Free shipping for Cummins check!!!
+                //if (freeShippingByZip_PTI(id) && (Convert.ToInt32(getPrintableCompanyID(id)) == 3554 || Convert.ToInt32(getPrintableCompanyID(id)) == 14969))  
+                //{
+                //    charges = 0.00M;
+                //    Console.WriteLine("Cummins - Columbus PTI Order: No charge shipping");
+                //    errorLog("NOCHRG", "No charge Cummins", pti_ID + " - No charge shipping $0 - " + id);
+                //    updateItemCharges(0.00M, id);
+                //    updateItemCharges_PTI(0.00M, id, pti_ID);
+                //    updateItemCharges_OrderDetails(0.00M, pti_ID);
+                //}
+                //else
+                //{
+                //    Console.WriteLine("Charges: $" + charges);
+                //    updateItemCharges_PTI(charges,id,pti_ID);
+                //}
             }
             #endregion
 
@@ -723,8 +741,8 @@ namespace UPS_EODprocessing
 
                 string queryCharges = @"select ex.shipmentCharges
                                         from CT_UPS_EODexport ex
-                                            left outer join CT_UPS_EODitems it
-                                                on ex.id = it.exportID
+                                        left outer join CT_UPS_EODitems it
+                                        on ex.id = it.exportID
                                         where it.id = " + id;
 
                 string queryNumPackages = @"select isnull(count(id),0)
@@ -944,18 +962,8 @@ namespace UPS_EODprocessing
                                    set itemCharges = '" + cost + @"'
                                    where id = " + id;
 
-//            string updateQuery2 = @"update ShipmentItems
-//                                    set ActualCharge = " + totalCost + @",
-//                                        EstimatedChrg = " + totalCost + @"
-//                                    where ShipmentNumber = (select shipmentNum
-//                                                            from printable.dbo.CT_UPS_EODitems
-//                                                            where id = " + id + @")
-//                                    and LineN = (select shipmentLineNum
-//                                                            from printable.dbo.CT_UPS_EODitems
-//                                                            where id = " + id + ")";
-
             string updateQuery2 = @"update ShipmentItems
-                                    set ActualCharge = " + totalCost + @"
+                                    set ActualCharge = " + totalCost + @"     
                                     where ShipmentNumber = (select shipmentNum
                                                             from printable.dbo.CT_UPS_EODitems
                                                             where id = " + id + @")
@@ -1031,6 +1039,7 @@ namespace UPS_EODprocessing
             ArrayList al = new ArrayList();
 
             int jobN = getJobN(Convert.ToInt32(PTI_id));
+            int FGNum = getFGNum(Convert.ToInt32(PTI_id));
 
             prevCost = getPrevCharges(id);
             totalCost = prevCost + cost;
@@ -1040,21 +1049,6 @@ namespace UPS_EODprocessing
                                    WHERE PTI_lineItemID = (SELECT PTI_lineItemID
                                                            FROM printable.dbo.CT_UPS_EODitems
                                                            WHERE id = " + pID + @")";
-
-            //            string updateQuery2 = @"update ShipmentItems
-            //                                    set ActualCharge = " + totalCost + @",
-            //                                        EstimatedChrg = " + totalCost + @"
-            //                                    where ShipmentNumber = (select shipmentNum
-            //                                                            from printable.dbo.CT_UPS_EODitems
-            //                                                            where id = " + id + @")
-            //                                    and LineN = (select shipmentLineNum
-            //                                                            from printable.dbo.CT_UPS_EODitems
-            //                                                            where id = " + id + ")";
-
-            string updateQuery2 = @"UPDATE ShipmentItems
-                                    SET ActualCharge = " + totalCost + @"
-                                    WHERE MainReference = " + jobN;
-
             //UPDATE EODitems TABLE
             Console.WriteLine("Updating EODitems Table");
             try
@@ -1084,33 +1078,77 @@ namespace UPS_EODprocessing
                 Console.WriteLine(e.ToString());
             }
 
-            //UPDATE ShipmentItems TABLE
-            try
+            if (jobN != 0)
             {
-                using (SqlConnection conn = new SqlConnection(Globals.get_logicConnString))
+                Console.WriteLine("Updating JOB costing...");
+                //UPDATE ShipmentItems TABLE via JOBN
+                string updateQuery2 = @"UPDATE ShipmentItems
+                                        SET ActualCharge = " + cost + @"
+                                        WHERE MainReference = " + jobN;
+                try
                 {
-                    SqlCommand command = new SqlCommand(updateQuery2, conn);
-                    try
+                    using (SqlConnection conn = new SqlConnection(Globals.get_logicConnString))
                     {
-                        int rowsUpdated = 0;
-                        command.Connection.Open();
-                        rowsUpdated = command.ExecuteNonQuery();
-                        Console.WriteLine("ShipmentItems Table Updated\n");
-                        command.Dispose();
-                        command = null;
-                        errorLog("CHRG-" + id, "ItemCharges updated for id:" + id, "Prev: $" + prevCost + ", New: $" + totalCost);
-                    }
-                    catch (Exception e)
-                    {
-                        errorLog("16", "updateItemCharges", e.ToString().Substring(0, 250));
-                        Console.WriteLine(e.ToString());
+                        SqlCommand command = new SqlCommand(updateQuery2, conn);
+                        try
+                        {
+                            int rowsUpdated = 0;
+                            command.Connection.Open();
+                            rowsUpdated = command.ExecuteNonQuery();
+                            Console.WriteLine("ShipmentItems Table Updated\n");
+                            command.Dispose();
+                            command = null;
+                            errorLog("CHRG-" + id, "ItemCharges updated for id:" + id, "Prev: $" + prevCost + ", New: $" + totalCost);
+                        }
+                        catch (Exception e)
+                        {
+                            errorLog("16", "updateItemCharges", e.ToString().Substring(0, 250));
+                            Console.WriteLine(e.ToString());
+                        }
                     }
                 }
+                catch (Exception e)
+                {
+                    errorLog("17", "updateItemCharges", e.ToString().Substring(0, 250));
+                    Console.WriteLine(e.ToString());
+                }
             }
-            catch (Exception e)
+            else if (FGNum != 0)
             {
-                errorLog("17", "updateItemCharges", e.ToString().Substring(0, 250));
-                Console.WriteLine(e.ToString());
+                Console.WriteLine("Updating FG Order costing...");
+                //UPDATE ShipmentItems TABLE via FGNum
+                string updateQuery2 = @"update plogic.dbo.shipmentitems
+                                        set actualcharge = " + totalCost + @"
+                                        where shipmentNumber = (select shipmentnumber
+						                                         from plogic.dbo.shipments
+						                                         where FGOrder = " + FGNum + ")";
+                try
+                {
+                    using (SqlConnection conn = new SqlConnection(Globals.get_logicConnString))
+                    {
+                        SqlCommand command = new SqlCommand(updateQuery2, conn);
+                        try
+                        {
+                            int rowsUpdated = 0;
+                            command.Connection.Open();
+                            rowsUpdated = command.ExecuteNonQuery();
+                            Console.WriteLine("ShipmentItems Table Updated\n");
+                            command.Dispose();
+                            command = null;
+                            errorLog("CHRG-FG" + id, "ItemCharges updated for id:" + id, "Prev: $" + prevCost + ", New: $" + cost);
+                        }
+                        catch (Exception e)
+                        {
+                            errorLog("16", "updateItemCharges", e.ToString().Substring(0, 250));
+                            Console.WriteLine(e.ToString());
+                        }
+                    }
+                }
+                catch (Exception e)
+                {
+                    errorLog("17", "updateItemCharges", e.ToString().Substring(0, 250));
+                    Console.WriteLine(e.ToString());
+                }
             }
         }
 
@@ -1284,7 +1322,7 @@ namespace UPS_EODprocessing
             string id = pID;
             ArrayList al = new ArrayList();
 
-            string getPrevQuery = @"select ActualCharge
+            string getPrevQuery = @"select ISNULL(ActualCharge,0)
                                     from ShipmentItems
                                     where ShipmentNumber = (select shipmentNum
                                                             from printable.dbo.CT_UPS_EODitems
@@ -1482,7 +1520,227 @@ namespace UPS_EODprocessing
             return jobN;
         }
 
+        public int getFGNum(int pti_lineItemID)
+        {
+            int fgNum = 0;
 
+            string q = @"SELECT FGorder
+                        FROM printable.dbo.vw_UPS_EoditemsDetail
+                        WHERE comments = '" + pti_lineItemID + "'";
+
+            try
+            {
+                using (SqlConnection conn = new SqlConnection(Globals.get_printableConnString))
+                {
+                    SqlCommand command = new SqlCommand(q, conn);
+                    try
+                    {
+                        command.Connection.Open();
+
+                        fgNum = Convert.ToInt32(command.ExecuteScalar() ?? 0);
+
+                        conn.Close();
+                    }
+                    catch (Exception e)
+                    {
+                        errorLog("XX", "getJobN", e.ToString().Substring(0, 250));
+                        Console.WriteLine(e.ToString());
+                    }
+                }
+            }
+            catch (Exception e)
+            {
+                errorLog("XX", "getJobN", e.ToString().Substring(0, 250));
+                Console.WriteLine(e.ToString());
+            }
+
+            return fgNum;
+        }
+
+        public int getCustomerN(int jobN)
+        {
+            int custN = 0;
+
+            string q = @"select top 1 customerN
+                        from plogic.dbo.openjob
+                        where jobn = " + jobN;
+
+            try
+            {
+                using (SqlConnection conn = new SqlConnection(Globals.get_printableConnString))
+                {
+                    SqlCommand command = new SqlCommand(q, conn);
+                    try
+                    {
+                        command.Connection.Open();
+
+                        custN = Convert.ToInt32(command.ExecuteScalar() ?? 0);
+
+                        conn.Close();
+                    }
+                    catch (Exception e)
+                    {
+                        errorLog("XX", "getCustN", e.ToString().Substring(0, 250));
+                        Console.WriteLine(e.ToString());
+                    }
+                }
+            }
+            catch (Exception e)
+            {
+                errorLog("XX", "getCustN", e.ToString().Substring(0, 250));
+                Console.WriteLine(e.ToString());
+            }
+
+            return custN;
+        }
+
+        public int getCustomerNFG(int FGNum)
+        {
+            int custN = 0;
+
+            string q = @"select top 1 customerN
+                        from plogic.dbo.FGIOrderMast
+                        where OrderN = " + FGNum;
+
+            try
+            {
+                using (SqlConnection conn = new SqlConnection(Globals.get_printableConnString))
+                {
+                    SqlCommand command = new SqlCommand(q, conn);
+                    try
+                    {
+                        command.Connection.Open();
+
+                        custN = Convert.ToInt32(command.ExecuteScalar() ?? 0);
+
+                        conn.Close();
+                    }
+                    catch (Exception e)
+                    {
+                        errorLog("XX", "getCustN", e.ToString().Substring(0, 250));
+                        Console.WriteLine(e.ToString());
+                    }
+                }
+            }
+            catch (Exception e)
+            {
+                errorLog("XX", "getCustN", e.ToString().Substring(0, 250));
+                Console.WriteLine(e.ToString());
+            }
+
+            return custN;
+        }
+
+        public int getPrintableCompanyID(string ID)
+        {
+            int companyID = 0;
+            int jobN = getJobN(Convert.ToInt32(ID));
+            int FGNum = getFGNum(Convert.ToInt32(ID));
+
+            if (getCustomerN(jobN) > 0)
+            {
+                string q = @"SELECT TOP 1 Company_ID
+                         FROM printable.dbo.CustomerInfo
+                         WHERE LogicCustN = " + getCustomerN(jobN);
+
+                try
+                {
+                    using (SqlConnection conn = new SqlConnection(Globals.get_printableConnString))
+                    {
+                        SqlCommand command = new SqlCommand(q, conn);
+                        try
+                        {
+                            command.Connection.Open();
+
+                            companyID = Convert.ToInt32(command.ExecuteScalar() ?? 0);
+
+                            conn.Close();
+                        }
+                        catch (Exception e)
+                        {
+                            errorLog("XX", "getJobN", e.ToString().Substring(0, 250));
+                            Console.WriteLine(e.ToString());
+                        }
+                    }
+                }
+                catch (Exception e)
+                {
+                    errorLog("XX", "getJobN", e.ToString().Substring(0, 250));
+                    Console.WriteLine(e.ToString());
+                }
+            }
+            else if (getCustomerNFG(FGNum) > 0)
+            {
+                string q = @"SELECT TOP 1 Company_ID
+                             FROM printable.dbo.CustomerInfo
+                             WHERE LogicCustN = " + getCustomerN(jobN);
+
+                try
+                {
+                    using (SqlConnection conn = new SqlConnection(Globals.get_printableConnString))
+                    {
+                        SqlCommand command = new SqlCommand(q, conn);
+                        try
+                        {
+                            command.Connection.Open();
+
+                            companyID = Convert.ToInt32(command.ExecuteScalar() ?? 0);
+
+                            conn.Close();
+                        }
+                        catch (Exception e)
+                        {
+                            errorLog("XX", "getJobN", e.ToString().Substring(0, 250));
+                            Console.WriteLine(e.ToString());
+                        }
+                    }
+                }
+                catch (Exception e)
+                {
+                    errorLog("XX", "getJobN", e.ToString().Substring(0, 250));
+                    Console.WriteLine(e.ToString());
+                }
+            }
+
+            return companyID;
+        }
+
+        public int getShipN(string pID)
+        {
+            int shipN = 0;
+
+            string q = @"SELECT shipmentNum
+                         FROM CT_UPS_EODitems
+                         WHERE id = " + pID;
+
+            try
+            {
+                using (SqlConnection conn = new SqlConnection(Globals.get_printableConnString))
+                {
+                    SqlCommand command = new SqlCommand(q, conn);
+                    try
+                    {
+                        command.Connection.Open();
+
+                        shipN = Convert.ToInt32(command.ExecuteScalar() ?? 0);
+
+                        conn.Close();
+                    }
+                    catch (Exception e)
+                    {
+                        errorLog("XX", "getShipN", e.ToString().Substring(0, 250));
+                        Console.WriteLine(e.ToString());
+                    }
+                }
+            }
+            catch (Exception e)
+            {
+                errorLog("XX", "getShipN", e.ToString().Substring(0, 250));
+                Console.WriteLine(e.ToString());
+            }
+
+            return shipN;
+        }
 
         //                                                                                                  
         // ALL NEW METHODS                                                                                  
@@ -1648,11 +1906,6 @@ namespace UPS_EODprocessing
                 Console.WriteLine(e.ToString());
             }
         }
-
-        //                                                                                                  
-        //                                                                                                  
-        //                                                                                                  
-
 
         //SMTP Connection Settings
         private static SmtpClient smtpClient = new SmtpClient("192.168.240.27");

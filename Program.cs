@@ -61,8 +61,8 @@ namespace UPS_EODprocessing
                 #endregion
 
                 #region NON-UPS ITEMS
-                    //INSERT AND PROCESS ALL NON UPS EOD ITEMS
-                    me.insertEODitems_nonUPS();
+                //INSERT AND PROCESS ALL NON UPS EOD ITEMS
+                me.insertEODitems_nonUPS();
                 #endregion
 
                 #region INTERNATIONAL
@@ -101,7 +101,7 @@ namespace UPS_EODprocessing
                     }
                     else
                     {
-                        me.sendEmail("shawnh@finelink.com", row[1].ToString() + " Shipment: Bad Conversion");
+                        me.sendEmail("keenan@finelink.com", row[1].ToString() + " Shipment: Bad Conversion");
                     }
                     
                 }
